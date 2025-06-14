@@ -10,7 +10,7 @@ https://hal-val.github.io/3D_final_project/try_trail.html
 This project is an interactive particle system built with WebGL and Three.js. It visualizes particles that respond to real-time facial expressions (smile, surprise, etc.) using MediaPipe.
 
 ## 🌐 Demo
-[Demo](https://hal-val.github.io/3D_final_project/try_trail.html)  
+[Demo](https://hal-val.github.io/3D_final_project/ParticleSystem.html)  
 ![Demo Screenshot](./screenshot.png)
 
 ## ✨ Features
