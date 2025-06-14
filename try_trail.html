@@ -221,7 +221,7 @@
 </head>
 <body>
     <video id="webcam" autoplay muted playsinline style="display:none;"></video>
-    <canvas id="overlay" width="320" height="240"></canvas>
+    <canvas id="overlay" width="320" height="240" style="display:none;"></canvas>
     <div id="blendshape-scores"></div>
     <button id="start-button">▶ Start</button>
     <div id="expression-scores"></div>
@@ -309,6 +309,10 @@
                 } catch (err) {
                     console.error("fail to play audio:", err);
                 }
+
+                // Show the overlay canvas after the transition
+                document.getElementById("overlay").style.display = "block";
+
             
                 // initialize faceLandmarker and start camera
                 await initFaceLandmarker();
