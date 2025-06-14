@@ -3,13 +3,14 @@ https://hal-val.github.io/3D_final_project/uzu.html
 https://hal-val.github.io/3D_final_project/try_trail.html
 
 
-# WebGL Particle Interaction with Face Expression
+# A Particle System that Change with Facial Expressions
+
 
 ## 📖 Overview
 This project is an interactive particle system built with WebGL and Three.js. It visualizes particles that respond to real-time facial expressions (smile, surprise, etc.) using MediaPipe.
 
 ## 🌐 Demo
-[Live Demo](https://your-deployment-url.com)  
+[Demo](https://hal-val.github.io/3D_final_project/try_trail.html)  
 ![Demo Screenshot](./screenshot.png)
 
 ## ✨ Features
