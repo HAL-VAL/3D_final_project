@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Stylish GPU Particle</title>
+  <title>Project -A Particle System that Change with Facial Expressions-</title>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500&display=swap" rel="stylesheet">
   <style>
     body {
@@ -102,17 +102,131 @@
       }
     }
   </script>
+    <!-- Material -->
+    <script id="vertexShader" type="x-shader/x-vertex">
+    uniform sampler2D texturePosition;
+    uniform float pointSize;
+
+    void main() {
+        vec4 pos = texture2D(texturePosition, uv);
+        gl_Position = projectionMatrix * modelViewMatrix * pos;
+
+        // Set particle size
+        gl_PointSize = pointSize;
+    }
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-fragment">
+    // uniform float blinkStrength;
+    uniform float smileStrength;    // smile expression strength
+    uniform float surpriseStrength; // surprise expression strength
+    uniform float time;
+
+    void main() {
+        vec2 coord = gl_PointCoord - 0.5; // Center at the origin
+        if (length(coord) > 0.5) discard;
+
+        vec3 baseColor = vec3(1.0); // basecolor: white
+
+        // blinking
+        //baseColor = mix(baseColor, vec3(1.0, 0.0, 0.0), blinkStrength);
+
+        // Smile: pink
+        baseColor = mix(baseColor, vec3(1.0, 0.078, 0.576), smileStrength);
+
+        // surprise: blue
+        vec3 glowColor = vec3(0.255, 0.412, 0.882);
+        baseColor = mix(baseColor, glowColor, surpriseStrength);
+
+        gl_FragColor = vec4(baseColor, 1.0);
+    }
+  </script>
+
+  <!-- Velocity -->
+  <script id="velocityShader" type="x-shader/x-fragment">
+    uniform float smileStrength;
+    uniform float surpriseStrength;
+    uniform float time;
+
+    void main() {
+        vec2 uv = gl_FragCoord.xy / resolution.xy;
+        vec4 pos = texture2D(texturePosition, uv);
+        vec4 vel = texture2D(textureVelocity, uv);
+
+        vec3 tangent; // for rotation
+        vec3 gravity;
+        
+
+        if (smileStrength > 0.2 && (smileStrength - surpriseStrength) > 0.1) {
+            // when smilestrength is strong
+            tangent = normalize(vec3(-pos.y, pos.x, 0.0)); // counter-clockwise
+            gravity = vec3(0.0, 0.0, 0.02); // upward
+        } else if (surpriseStrength > 0.2 && (surpriseStrength - smileStrength) > 0.1) {
+            // when surpriseStrength is strong
+            tangent = normalize(vec3(pos.y, -pos.x, 0.0)); // clockwise
+            gravity = vec3(0.0, 0.0, -0.02); // suction
+        } else {
+            // mean: no rotation, floating
+            tangent = vec3(0.0);
+            gravity = vec3(0.0, 0.0, 0.002);
+        }
+
+        vec3 acc = tangent * 0.1 + gravity;
+        gl_FragColor = vec4((vel.xyz + acc) * 0.98, 1.0);
+
+    }
+  </script>
+
+<!-- Position -->
+  <script id="positionShader" type="x-shader/x-fragment">
+    uniform float time;
+    uniform vec3 eyeCenterPosition; // get eye center position
+
+    void main() {
+        vec2 uv = gl_FragCoord.xy / resolution.xy;
+        vec4 pos = texture2D(texturePosition, uv);
+        vec4 vel = texture2D(textureVelocity, uv);
+
+        // add velocity to position
+        pos.xyz += vel.xyz * 0.007;
+
+        // re-position if z is too high or too low
+        if (pos.z > 5.0 || pos.z < -5.0) {
+            float seed1 = dot(uv + time * 0.1, vec2(12.9898, 78.233));
+            float seed2 = dot(uv + time * 0.15, vec2(39.3468, 11.135));
+            float seed3 = dot(uv + time * 0.22, vec2(93.843, 15.315));
+
+            float rnd1 = fract(sin(seed1) * 43758.5453);
+            float rnd2 = fract(sin(seed2) * 23421.6311);
+            float rnd3 = fract(sin(seed3) * 12521.1353);
+
+            // change to spherical coordinates
+            float r = pow(rnd1, 1.0/3.0) * 5.0;
+            float theta = rnd2 * 6.28318;
+            float phi = acos(2.0 * rnd3 - 1.0);
+
+            //pos.x = r * sin(phi) * cos(theta);
+            //pos.y = r * sin(phi) * sin(theta);
+            //pos.z = r * cos(phi);
+
+            // re-position around eye center
+            pos.x = eyeCenterPosition.x + r * sin(phi) * cos(theta);
+            pos.y = eyeCenterPosition.y + r * sin(phi) * sin(theta);
+            pos.z = max(eyeCenterPosition.z+ r * cos(phi), -2.0);
+        }
+        gl_FragColor = pos;
+    }
+  </script>
+
 </head>
 <body>
-  <video id="webcam" autoplay muted playsinline style="display:none;"></video>
-  <canvas id="overlay" width="320" height="240"></canvas>
-  <div id="blendshape-scores"></div>
-  <button id="start-button">▶ Start</button>
-  <div id="expression-scores"></div>
-  <audio id="bgm" src="birth_of_dragon.mp3" loop></audio>
-  <div id="transition-cover"></div>
-
-
+    <video id="webcam" autoplay muted playsinline style="display:none;"></video>
+    <canvas id="overlay" width="320" height="240"></canvas>
+    <div id="blendshape-scores"></div>
+    <button id="start-button">▶ Start</button>
+    <div id="expression-scores"></div>
+    <audio id="bgm" src="birth_of_dragon.mp3" loop></audio>
+    <div id="transition-cover"></div>
 
 
     <script type="module">
@@ -125,30 +239,25 @@
         import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
 
 
+        // initialization
         const { FaceLandmarker, FilesetResolver } = vision;
 
-
-        // 初期設定
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
         renderer.autoClear = false;
+        const controls = new OrbitControls(camera, renderer.domElement); // OrbitControls
+        controls.enableDamping = false;
 
-        // particle 決め
-        /*const WIDTH = 128; //area
-        //const PARTICLES = WIDTH * WIDTH;
-
-        const mean = 10;
-        const variance = 30;
-        const PARTICLES = Math.floor(mean + Math.random() * variance * WIDTH * WIDTH); // ここに、瞬きの検出で増えるとか*/
-
+        // Define the number of particles
         const WIDTH = 128;
         const MAX_PARTICLES = WIDTH * WIDTH;
         const mean = 10000;
         const stdDev = 3000;
-        const MIN_PARTICLES = mean - stdDev; // = 7000（現実的な最小値）
+        const MIN_PARTICLES = mean - stdDev; // = 7000
 
         function sampleNormal(mu, sigma) {
             const u1 = Math.random();
@@ -160,98 +269,93 @@
         const rawParticles = sampleNormal(mean, stdDev);
         const PARTICLES = Math.max(MIN_PARTICLES, Math.min(Math.floor(rawParticles), MAX_PARTICLES));
 
+
         // Add trail effect
         const composer = new EffectComposer(renderer);
         composer.addPass(new RenderPass(scene, camera));
         const afterimagePass = new AfterimagePass();
-        afterimagePass.uniforms['damp'].value = 0.7; // 残像の強さ
+        afterimagePass.uniforms['damp'].value = 0.7; // trail strength
         composer.addPass(afterimagePass);
 
-
-
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = false;
-
-        //ビデオ
+        // camera and video on the right bottom
         const video = document.getElementById("webcam");
-        let faceLandmarker;
+        // time comparison
         let lastVideoTime = -1;
 
-        // 右下のカメラ動画
+        // faceLandmarker
         const overlay = document.getElementById("overlay");
         const overlayCtx = overlay.getContext("2d");
+        let faceLandmarker;
 
-        // スタート画面でのアニメーションの実行のためのフラグ
+
+        // the flag for run the animation on the start screen
         let isDetectionActive = false; 
 
 
-        // Startボタン
+        // Start button
         document.getElementById("start-button").addEventListener("click", async () => {
-            document.getElementById("start-button").style.display = "none";  // ボタンを非表示
+            document.getElementById("start-button").style.display = "none";  // no button after click
             
-
-            // 画面切り替えアニメーションの開始
+            // change the screen
             const cover = document.getElementById("transition-cover");
             cover.classList.add("show");
 
-            // 黒が全体を覆うまで少し待ってから初期化処理を開始（約1秒）
+            // after changing the screen, play BGM
             setTimeout(async () => {
-                // 音楽再生
+                // play BGM
                 const audio = document.getElementById("bgm");
                 try {
                     audio.play();
                 } catch (err) {
-                    console.error("音楽の再生に失敗:", err);
+                    console.error("fail to play audio:", err);
                 }
             
-                // 初期化処理
+                // initialize faceLandmarker and start camera
                 await initFaceLandmarker();
                 await startCamera();
                 isDetectionActive = true;
 
-                // フェードアウト
+                // fade out the black cover
                 cover.style.transition = "opacity 1s ease-in-out";
                 cover.style.opacity = "0";
 
-                // 最後に完全に非表示にする（必要なら）
+                // wait for the fade out to finish
                 setTimeout(() => {
                     cover.style.display = "none";
                 }, 1000);
 
-            }, 1000); // 1秒間で黒いカバーが表示されるまで待つ
+            }, 1000); // wait 1 second before starting the animation
         });
 
-        //camera.position.z = 10;
-        camera.position.z = 5;
 
         // Resize handler
         window.addEventListener('resize', () => {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        camera.aspect = width / height;
-        camera.updateProjectionMatrix();
-        renderer.setSize(width, height);
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
         });
 
 
-        // ヘルパー
+        // helper
         /*{
         const axesHelper = new THREE.AxesHelper(70);
         scene.add(axesHelper);
-        // x 赤
+        // x red
         axesHelper.geometry.attributes.color.array.set([1, 0, 0], 0);
         axesHelper.geometry.attributes.color.array.set([1, 0, 0], 3);
-        // y 緑
+        // y green
         axesHelper.geometry.attributes.color.array.set([0, 1, 0], 6);
         axesHelper.geometry.attributes.color.array.set([0, 1, 0], 9);
-        // Z 青
+        // Z blue
         axesHelper.geometry.attributes.color.array.set([0, 0, 1], 12);
         axesHelper.geometry.attributes.color.array.set([0, 0, 1], 15);
 
         axesHelper.geometry.attributes.color.needsUpdate = true;
         }*/
 
-        // mediapipe初期化
+        // initialization of mediapipe
         async function initFaceLandmarker() {
         const resolver = await FilesetResolver.forVisionTasks(
             "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
@@ -263,11 +367,9 @@
             },
             runningMode: "VIDEO",
             numFaces: 1,
-            outputFaceBlendshapes: true  // ブレンドシェイプ
+            outputFaceBlendshapes: true
         });
         }
-
-
 
         // GPU Compute
         const gpuCompute = new GPUComputationRenderer(WIDTH, WIDTH, renderer);
@@ -296,105 +398,15 @@
             velArray[i + 3] = 1; // α
         }
 
-        const velocityVar = gpuCompute.addVariable("textureVelocity", `
-            uniform float smileStrength;
-            uniform float surpriseStrength;
-            uniform float time;
+        // velocity and position
+        const velocityShaderCode = document.getElementById('velocityShader').textContent;
+        const positionShaderCode = document.getElementById('positionShader').textContent;
 
-            void main() {
-                vec2 uv = gl_FragCoord.xy / resolution.xy;
-                vec4 pos = texture2D(texturePosition, uv);
-                vec4 vel = texture2D(textureVelocity, uv);
-
-                vec3 tangent;
-                vec3 gravity;
-                
-
-                /*if (smileStrength > surpriseStrength) {
-                    tangent = normalize(vec3(-pos.y, pos.x, 0.0)); // 反時計回り
-                    gravity = vec3(0.0, 0.0, 0.02); // 上昇
-                } else {
-                    tangent = normalize(vec3(pos.y, -pos.x, 0.0)); // 時計回り
-                    gravity = vec3(0.0, 0.0, -0.02); // 吸い込み
-                }*/
-
-                /*if (smileStrength > 0.1 && smileStrength + 0.05 > surpriseStrength) {
-                    tangent = normalize(vec3(-pos.y, pos.x, 0.0)); // 反時計回り
-                    gravity = vec3(0.0, 0.0, 0.02);                // 上昇
-                } else {
-                    tangent = normalize(vec3(pos.y, -pos.x, 0.0)); // 時計回り
-                    gravity = vec3(0.0, 0.0, -0.02);               // 吸い込み
-                }*/
-
-                if (smileStrength > 0.2 && (smileStrength - surpriseStrength) > 0.1) {
-                    // 笑顔が強いとき
-                    tangent = normalize(vec3(-pos.y, pos.x, 0.0)); // 反時計回り
-                    gravity = vec3(0.0, 0.0, 0.02); // 上昇
-                } else if (surpriseStrength > 0.2 && (surpriseStrength - smileStrength) > 0.1) {
-                    // 驚きが強いとき
-                    tangent = normalize(vec3(pos.y, -pos.x, 0.0)); // 時計回り
-                    gravity = vec3(0.0, 0.0, -0.02); // 吸い込み
-                } else {
-                    // 中間：回転ゼロ、浮遊
-                    tangent = vec3(0.0);
-                    gravity = vec3(0.0, 0.0, 0.002);
-                }
-
-                vec3 acc = tangent * 0.1 + gravity;
-                gl_FragColor = vec4((vel.xyz + acc) * 0.98, 1.0);
-
-            }
-        `, dtVelocity);
-
-        const positionVar = gpuCompute.addVariable("texturePosition", `
-            uniform float time;
-            uniform vec3 eyeCenterPosition; // 眼の中心位置を受け取る
-
-            void main() {
-                vec2 uv = gl_FragCoord.xy / resolution.xy;
-                vec4 pos = texture2D(texturePosition, uv);
-                vec4 vel = texture2D(textureVelocity, uv);
-
-                // 現在位置に速度を加算
-                pos.xyz += vel.xyz * 0.007; //この値を変えると、速度が遅くなる
-
-                // y座標が低すぎる場合、再配置
-                if (pos.z > 5.0 || pos.z < -5.0) {
-                    float seed1 = dot(uv + time * 0.1, vec2(12.9898, 78.233));
-                    float seed2 = dot(uv + time * 0.15, vec2(39.3468, 11.135));
-                    float seed3 = dot(uv + time * 0.22, vec2(93.843, 15.315));
-
-                    float rnd1 = fract(sin(seed1) * 43758.5453);
-                    float rnd2 = fract(sin(seed2) * 23421.6311);
-                    float rnd3 = fract(sin(seed3) * 12521.1353);
-
-                    // 球状配置に変換
-                    float r = pow(rnd1, 1.0/3.0) * 5.0;
-                    float theta = rnd2 * 6.28318;
-                    float phi = acos(2.0 * rnd3 - 1.0);
-
-                    //pos.x = r * sin(phi) * cos(theta);
-                    //pos.y = r * sin(phi) * sin(theta);
-                    //pos.z = r * cos(phi);
-
-                    // 眼の位置を中心に配置
-                    pos.x = eyeCenterPosition.x + r * sin(phi) * cos(theta);
-                    pos.y = eyeCenterPosition.y + r * sin(phi) * sin(theta);
-                    pos.z = max(eyeCenterPosition.z+ r * cos(phi), -2.0);
-                }
-                gl_FragColor = pos;
-            }
-        `, dtPosition);
-
-        
-
+        const velocityVar = gpuCompute.addVariable("textureVelocity", velocityShaderCode, dtVelocity);
+        const positionVar = gpuCompute.addVariable("texturePosition", positionShaderCode, dtPosition);
 
         velocityVar.dependencies = [positionVar, velocityVar];
         positionVar.dependencies = [positionVar, velocityVar];
-
-
-
-
 
 
         const error = gpuCompute.init();
@@ -402,13 +414,13 @@
         console.error(error);
         }
 
-        // 連携関連
+        // initialize uniforms
         positionVar.material.uniforms.eyeCenterPosition = { value: new THREE.Vector3(0, 0, 0) };
         velocityVar.material.uniforms.smileStrength = { value: 0.0 };
         velocityVar.material.uniforms.surpriseStrength = { value: 0.0 };
 
 
-        // パーティクルジオメトリ
+        // particle geometry
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(PARTICLES * 3);
         const uvs = new Float32Array(PARTICLES * 2);
@@ -425,72 +437,19 @@
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
-        // マテリアル
+        // material
         const material = new THREE.ShaderMaterial({
         uniforms: {
             texturePosition: { value: null },
             pointSize: { value: 2.0 },
             time: { value: 0 },
-            blinkStrength: {value: 0.0},
-            smileStrength: { value: 0.0 }, // 笑顔の強さを受け取る
-            surpriseStrength: { value: 0.0 }, // 驚きの強さを受け取る
-
+            // get blendshapeScores
+            //blinkStrength: {value: 0.0},
+            smileStrength: { value: 0.0 }, // smile
+            surpriseStrength: { value: 0.0 }, // surprise
         },
-        vertexShader: `
-            uniform sampler2D texturePosition;
-            uniform float pointSize;
-            uniform float blinkStrength;
-
-            void main() {
-                vec4 pos = texture2D(texturePosition, uv);
-                gl_Position = projectionMatrix * modelViewMatrix * pos;
-
-                // パーティクルの基本サイズを 2.0〜6.0 に変化させる（瞬きで膨らむ）
-                //float pointSize = mix(2.0, 6.0, blinkStrength); 
-                //gl_PointSize = pointSize;
-
-                // pos.w が 0.8 より大きく、かつ blinkStrength > 0.3 くらいのとき反応
-                //float blinkResponse = step(0.8, pos.w) * step(0.3, blinkStrength);
-
-                //float baseSize = 2.0;
-                //float sizeBoost = 6.0;
-
-                //float finalSize = mix(pointSize, sizeBoost, blinkResponse);
-                gl_PointSize = pointSize;;
-            }
-        `,
-        fragmentShader: `
-            uniform float blinkStrength;
-            uniform float smileStrength; // 笑顔の強さを受け取る
-            uniform float surpriseStrength; // 驚きの強さを受け取る
-            uniform float time;
-            
-            void main() {
-                vec2 coord = gl_PointCoord - 0.5; // Center at the origin
-                if (length(coord) > 0.5) discard;
-
-                // 基本色（白）
-                vec3 baseColor = vec3(1.0);
-
-                // 瞬きで赤味を加える
-                //baseColor = mix(baseColor, vec3(1.0, 0.0, 0.0), blinkStrength);
-
-                // 笑顔でピンク味（または明るさ）を加える
-                baseColor = mix(baseColor, vec3(1.0, 0.078, 0.576), smileStrength);
-
-                // 驚き → 発光（青白＋パルス）
-                //float flash = sin(time * 10.0) * 0.5 + 0.5; // パルス: 0〜1
-                vec3 glowColor = vec3(0.255, 0.412, 0.882); // 青白色
-                baseColor = mix(baseColor, glowColor, surpriseStrength);
-
-                // 平均とか使用して、各スコアに対しての色を変化させる
-
-                // 最終的な色を制限（白を超えないように）
-                //baseColor = clamp(baseColor, 0.0, 1.0);
-
-                gl_FragColor = vec4(baseColor, 1.0);
-            }
-        `,
+        vertexShader: document.getElementById('vertexShader').textContent,
+        fragmentShader: document.getElementById('fragmentShader').textContent,
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending
@@ -499,81 +458,79 @@
         const particles = new THREE.Points(geometry, material);
         scene.add(particles);
 
+
+        // animation
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
 
-              // MediaPipeの顔検出
+              // detection of face landmarks and blendshapes
             if (isDetectionActive && faceLandmarker && video.readyState >= 2) {
                 const now = performance.now();
                 if (video.currentTime !== lastVideoTime) {
                     lastVideoTime = video.currentTime;
                     const results = faceLandmarker.detectForVideo(video, now);
 
-                    // 表示エリアを取得
+                    // area of blendshape scores
                     const scoreDiv = document.getElementById("blendshape-scores");
-                    // スコアを表示
                     const expressionScores = document.getElementById("expression-scores");
 
-                    // 👇 overlay 描画リセット （カメラ動画確認）
+                    // Clear the canvas and draw the current webcam frame
                     overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
                     overlayCtx.drawImage(video, 0, 0, overlay.width, overlay.height);
 
-                    //console.log("ランドマーク数:", results.faceLandmarks[0].length);
+                    //console.log("faceLandmarks:", results.faceLandmarks[0].length);
 
-                    // 眼の位置でパーティクルを操作
-                    const leftEye = results.faceLandmarks[0][468]; // 左目のランドマーク
-                    const rightEye = results.faceLandmarks[0][473]; // 右目のランドマーク
+                    // control the position of particles with eye position
+                    const leftEye = results.faceLandmarks[0][468];
+                    const rightEye = results.faceLandmarks[0][473];
                     const eyeLeftPosition = new THREE.Vector3(leftEye.x - 0.5, -(leftEye.y - 0.5), - 0.5, -(leftEye.z - 0.5)); // leftEye.z - 0.1
                     const eyeRightPosition = new THREE.Vector3(rightEye.x - 0.5, -(rightEye.y - 0.5), -(rightEye.z - 0.5)); // rightEye.z - 0.1
-                    // 中心位置（両目の中間）
+                    // calculate the center position of the eyes
                     const eyeCenterPos = new THREE.Vector3().addVectors(eyeLeftPosition, eyeRightPosition).multiplyScalar(0.5);
                     positionVar.material.uniforms.eyeCenterPosition.value.copy(eyeCenterPos);
                     //console.log("eyeCenterPosition:", eyeCenterPos);
 
 
-
                     if (results.faceLandmarks?.length > 0) {
-                        
-                        // 🔽 ブレンドシェイプスコアを取得して表示
+                        // show the blendshape scores
                         const blendshapes = results.faceBlendshapes[0].categories;
                         const lines = blendshapes.map(bs =>
                             `${bs.categoryName.padEnd(20)}: ${bs.score.toFixed(3)}`
                         );
                         scoreDiv.textContent = lines.join("\n");
 
-                        // 瞬き 各スコアに対する値の取得と値の計算
-                        const blinkLeft = blendshapes.find(bs => bs.categoryName === "eyeBlinkLeft")?.score || 0;
-                        const blinkRight = blendshapes.find(bs => bs.categoryName === "eyeBlinkRight")?.score || 0;
-                        const blinkStrength = (blinkLeft + blinkRight) / 2;
-                        material.uniforms.blinkStrength.value = blinkStrength;
+                        // blinking
+                        //const blinkLeft = blendshapes.find(bs => bs.categoryName === "eyeBlinkLeft")?.score || 0;
+                        //const blinkRight = blendshapes.find(bs => bs.categoryName === "eyeBlinkRight")?.score || 0;
+                        //const blinkStrength = (blinkLeft + blinkRight) / 2;
+                        //material.uniforms.blinkStrength.value = blinkStrength;
 
-                        // 笑顔の時
+                        // smiling
                         const smileLeft = blendshapes.find(bs => bs.categoryName === "mouthSmileLeft")?.score || 0;
                         const smileRight = blendshapes.find(bs => bs.categoryName === "mouthSmileRight")?.score || 0;
                         const eyeSquintLeft = blendshapes.find(bs => bs.categoryName === "eyeSquintLeft")?.score || 0;
                         const eyeSquintRight = blendshapes.find(bs => bs.categoryName === "eyeSquintRight")?.score || 0;
                         const smileStrength = (smileLeft + smileRight + eyeSquintLeft + eyeSquintRight) / 4;
                         
-                        // 驚き
+                        // surprise
                         const eyeWideLeft = blendshapes.find(bs => bs.categoryName === "eyeWideLeft")?.score || 0;
                         const eyeWideRight = blendshapes.find(bs => bs.categoryName === "eyeWideRight")?.score || 0;
                         const jawOpen = blendshapes.find(bs => bs.categoryName === "jawOpen")?.score || 0;
                         const surpriseStrength = Math.min((eyeWideLeft*90 + eyeWideRight*90 + jawOpen) / 3, 1.0);
                         
-                        // シェーダーの uniform に渡す
+                        // set the uniforms
                         material.uniforms.smileStrength.value = smileStrength;
                         material.uniforms.surpriseStrength.value = surpriseStrength;
-
                         velocityVar.material.uniforms.smileStrength.value = smileStrength;
                         velocityVar.material.uniforms.surpriseStrength.value = surpriseStrength;
 
-                        // ここで値を表示
+                        // show the expression scores
                         document.getElementById("expression-scores").textContent =
                         `smileStrength: ${smileStrength.toFixed(3)}\nsurpriseStrength: ${surpriseStrength.toFixed(3)}`;
 
 
-                        // 確認画面でランドマーク描画
+                        // chech the face landmarks
                         overlayCtx.fillStyle = 'red';
                         for (const pt of results.faceLandmarks[0]) {
                             overlayCtx.beginPath();
@@ -581,13 +538,12 @@
                             overlayCtx.fill();
                         }
 
-                        // 特定番号だけ色を変える（33番を青で強調）
+                        // check the eye landmarks
                         /*const specialPt = results.faceLandmarks[0][473];
                         overlayCtx.fillStyle = 'cyan';
                         overlayCtx.beginPath();
                         overlayCtx.arc(specialPt.x * overlay.width, specialPt.y * overlay.height, 4, 0, 2 * Math.PI);
                         overlayCtx.fill();*/
-                        
                     }
 
                 }
@@ -599,23 +555,18 @@
             material.uniforms.time.value = performance.now() * 0.001;
 
             renderer.setRenderTarget(null);
-            //renderer.render(scene, camera);
-
-            composer.render(); // ← トレイルでrebdererの代わりに発生
+            composer.render(); // because of the trail effect
+            //renderer.render(scene, camera); // without trail effect
         }
 
 
-        // mediapipe起動
+        // camera and video start
         async function startCamera() {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             video.srcObject = stream;
             await video.play();
-            animate(); // GPUパーティクル描画も含めてここから開始
+            animate();
         }
-        // ボタンの影響で消えました
-        //await initFaceLandmarker();
-        //await startCamera();
-
         animate();
 
     </script>
