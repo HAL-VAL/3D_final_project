@@ -9,6 +9,9 @@ By mapping expressions like smiles and surprise to particle motion, the system a
 
 ## Demo
 [CLICK HERE](https://hal-val.github.io/3D_final_project/ParticleSystem.html)  
+⚠️ **Note:** BGM will play automatically when you press the Start button.  
+Please make sure your volume is adjusted appropriately.
+
 
 ## Technologies Used
 
