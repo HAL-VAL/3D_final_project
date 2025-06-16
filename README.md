@@ -63,10 +63,10 @@ These normalized values (range 0.0–1.0) are passed as uniforms into the shader
 
 ### Particle Color
 - Base Color:
-All particles start as white:
+All particles start as white
 
 - Smile (smileStrength):
-Adds a pink tint as smileStrength increases,
+Adds a pink tint as smileStrength increases.
 
 - Surprise (surpriseStrength):
 Adds a blue glow as surpriseStrength increases.
@@ -81,7 +81,7 @@ Adds a blue glow as surpriseStrength increases.
 - Therefore, a future improvement would involve integrating an expression classification model (e.g., predicting the class such as “Happy” or “Angry”) instead of relying solely on raw values. This would allow for more intuitive and robust control of the particle system.
 
 - Incorporating [the LSTM-based model from recent research](https://arxiv.org/abs/2501.13432) could improve stability and responsiveness in expression detection, enabling smoother interaction and more accessible user experience.
-- 
+
 - The current system uses only two velocity patterns, and particles look best within the z = ±5 range. To improve visual appeal from all angles, future work could introduce varied speeds and less predictable, artistic motions beyond real-world physics.
 
 - This project uses `GPUComputationRenderer` to compute particle velocity and position. Switching to CUDA could enable more advanced and detailed animations through high-precision physical simulations.
@@ -91,7 +91,9 @@ Adds a blue glow as surpriseStrength increases.
 
 - Reeves, W. T. (1998). Particle systems—a technique for modeling a class of fuzzy objects. In Seminal graphics: pioneering efforts that shaped the field (pp. 203-220).
 - Grishchenko, Ivan, et al. "Blendshapes GHUM: Real-time Monocular Facial Blendshape Prediction." arXiv preprint arXiv:2309.05782 (2023).
-
+- https://codepen.io/mediapipe-preview/pen/OJBVQJm
+- https://particle-love.com/
+- https://threejs.org/examples/webgl_gpgpu_birds.html
 
 ## Audio Credits
 
