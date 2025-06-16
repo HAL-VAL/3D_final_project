@@ -9,7 +9,6 @@ By mapping expressions like smiles and surprise to particle motion, the system a
 
 ## Demo
 [CLICK HERE](https://hal-val.github.io/3D_final_project/ParticleSystem.html)  
-![Demo Screenshot](./screenshot.png)
 
 ## Technologies Used
 
@@ -23,9 +22,13 @@ This particle system utilizes a model based on MediaPipe’s Face Landmarker, wh
 
 The **Blendshape scores** refer to the values highlighted in red in the diagram below. These values are computed internally by the Blendshapes model.
 
-![Demo Screenshot](./related_work_1.jpg)
-.png)
-![Demo Screenshot](./related_work_2.jpg)
+
+<p float="left">
+  <img src="./related_work_1.jpg" width="45%"/>
+  <img src="./related_work_2.jpg" width="45%"/>
+</p>
+
+
 
 > For more details on how these models work and how the Blendshape scores are calculated, please refer to [the research papers](https://arxiv.org/abs/2309.05782) .
 
@@ -71,8 +74,6 @@ Adds a blue glow as surpriseStrength increases.
 
 ## Future Work
 
-## 🔮 Future Work
-
 - Using raw BlendShape scores directly often leads to issues: many of the scores remain at zero or predict only minimal values, even when the user's facial movements are significant. This limits interactivity, as users need to exaggerate their expressions to see noticeable particle changes.
 
 - In practical use cases like gaming, users rarely make such exaggerated expressions during play. Subtle changes in facial movement should still yield expressive feedback.
@@ -80,6 +81,10 @@ Adds a blue glow as surpriseStrength increases.
 - Therefore, a future improvement would involve integrating an expression classification model (e.g., predicting the class such as “Happy” or “Angry”) instead of relying solely on raw values. This would allow for more intuitive and robust control of the particle system.
 
 - Incorporating [the LSTM-based model from recent research](https://arxiv.org/abs/2501.13432) could improve stability and responsiveness in expression detection, enabling smoother interaction and more accessible user experience.
+- 
+- The current system uses only two velocity patterns, and particles look best within the z = ±5 range. To improve visual appeal from all angles, future work could introduce varied speeds and less predictable, artistic motions beyond real-world physics.
+
+- This project uses `GPUComputationRenderer` to compute particle velocity and position. Switching to CUDA could enable more advanced and detailed animations through high-precision physical simulations.
 
 
 ## References
